@@ -45,6 +45,7 @@ var QueryBuilderController = function(
   ];
 
   fetcherService.init().then(function() {
+    this.startObserving_();
     this.lovefieldService_.getStockList().then(
         this.populateUi_.bind(this));
   }.bind(this));
@@ -134,6 +135,12 @@ QueryBuilderController.prototype.populateUi_ = function(queryResults) {
  */
 QueryBuilderController.prototype.startObserving_ = function() {
   // Codelab TODO: Implement this method at codelab step7.
+  this.lovefieldService_.observeStockClosingPrices(function (changes) {
+    this.updateStockGraph_(changes[0].object);
+  }.bind(this));
+  this.lovefieldService_.observeSectorClosingPrices(function (changes) {
+    this.updateSectorGraph_(changes[0].object);
+  }.bind(this))
 };
 
 
@@ -149,13 +156,13 @@ QueryBuilderController.prototype.search = function() {
   var timeWindow = this.getTimeWindowDates_();
   if (this.scope_.searchMode == 'Sectors') {
     this.lovefieldService_.getSectorClosingPrices(
-        timeWindow[0], timeWindow[1], this.scope_.itemSelection).
-        then(this.updateSectorGraph_.bind(this));
+        timeWindow[0], timeWindow[1], this.scope_.itemSelection)//.
+        // then(this.updateSectorGraph_.bind(this));
   } else {
     // Case where searhMode == 'Stocks'
     this.lovefieldService_.getStockClosingPrices(
-        timeWindow[0], timeWindow[1], this.scope_.itemSelection).
-        then(this.updateStockGraph_.bind(this));
+        timeWindow[0], timeWindow[1], this.scope_.itemSelection)//.
+        // then(this.updateStockGraph_.bind(this));
   }
 };
 

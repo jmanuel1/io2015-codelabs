@@ -38,6 +38,21 @@ var LovefieldService = function() {
 LovefieldService.prototype.onConnected_ = function() {
   this.si_ = this.db_.getSchema().table('StockInfo');
   this.hd_ = this.db_.getSchema().table('HistoricalData');
+  this.stock_query_ = this.db_.select()
+      .from(this.hd_)
+      .where(lf.op.and(
+          this.hd_.Stock.eq(lf.bind(0) /*stock*/),
+          this.hd_.Date.between(lf.bind(1) /*start*/, lf.bind(2) /*end*/)))
+      .orderBy(this.hd_.Date, lf.Order.ASC);
+  this.sector_query_ = this.db_.select(
+      lf.fn.avg(this.hd_.Close), this.si_.Sector, this.hd_.Date)
+      .from(this.hd_, this.si_)
+      .where(lf.op.and(
+          this.hd_.Stock.eq(this.si_.Stock),
+          this.hd_.Date.between(lf.bind(1) /*start*/, lf.bind(2) /*end*/),
+          this.si_.Sector.eq(lf.bind(0) /*sector*/)))
+      .groupBy(this.si_.Sector, this.hd_.Date)
+      .orderBy(this.hd_.Date, lf.Order.ASC);
   console.log('DB connection established.');
 };
 
@@ -77,7 +92,23 @@ LovefieldService.prototype.getDbConnection = function() {
 LovefieldService.prototype.buildSchema_ = function() {
   // Codelab TODO Step1: Create two tables, HistoricalData and StockInfo.
   // var schemaBuilder = lf.schema.create('stocks', 1);
-  return null;
+  var schemaBuilder = lf.schema.create('stocks', 1);
+  schemaBuilder.createTable('HistoricalData')
+      .addColumn('Date', lf.Type.DATE_TIME)
+      .addColumn('Open', lf.Type.NUMBER)
+      .addColumn('High', lf.Type.NUMBER)
+      .addColumn('Low', lf.Type.NUMBER)
+      .addColumn('Close', lf.Type.NUMBER)
+      .addColumn('Volume', lf.Type.INTEGER)
+      .addColumn('Stock', lf.Type.STRING)
+      .addIndex('idx_stock', ['Stock'], false, lf.Order.DESC);
+  schemaBuilder.createTable('StockInfo')
+      .addColumn('CompanyName', lf.Type.STRING)
+      .addColumn('Sector', lf.Type.STRING)
+      .addColumn('Stock', lf.Type.STRING)
+      .addPrimaryKey(['Stock']);
+
+  return schemaBuilder;
 };
 
 
@@ -122,6 +153,14 @@ LovefieldService.prototype.insertData = function(
 
   // Codelab TODO Step2: Insert stockInfoRows and historicalDataRows to the
   // database.
+  var transaction = this.db_.createTransaction();
+  var si_insert_query = this.db_.insert().into(this.si_).values(stockInfoRows);
+  var hd_insert_query = this.db_.insert()
+      .into(this.hd_)
+      .values(historicalDataRows);
+  // Bonus exercise: single database transaction!
+  transaction.exec([si_insert_query, hd_insert_query]);
+
   return Promise.resolve();
 };
 
@@ -131,7 +170,10 @@ LovefieldService.prototype.insertData = function(
  */
 LovefieldService.prototype.getStockList = function() {
   // Codelab TODO Step3: Retrieve a list of all available stocks.
-  return Promise.resolve([]);
+  var query = this.db_.select(this.si_.Stock)
+      .from(this.si_)
+      .orderBy(this.si_.Stock, lf.Order.ASC);
+  return Promise.resolve(query.exec());
 };
 
 
@@ -141,7 +183,8 @@ LovefieldService.prototype.getStockList = function() {
  */
 LovefieldService.prototype.getSectorList = function() {
   // Codelab TODO Step3: Retrieve a list of all available sectors.
-  return Promise.resolve([]);
+  var query = this.db_.select(lf.fn.distinct(this.si_.Sector)).from(this.si_);
+  return Promise.resolve(query.exec());
 };
 
 
@@ -156,7 +199,9 @@ LovefieldService.prototype.getStockClosingPrices = function(
     start, end, stock) {
   // Codelab TODO Step4: Retrieve a list of closing prices for the given stock
   // within the given time window.
-  return Promise.resolve([]);
+  var query = this.stock_query_.bind([stock, start, end]);
+  console.log(query.explain());
+  return Promise.resolve(query.exec());
 };
 
 
@@ -171,7 +216,8 @@ LovefieldService.prototype.getSectorClosingPrices = function(
     start, end, sector) {
   // Codelab TODO Step4: Retrieve a list of closing prices for the given
   // industry sector within the given time window.
-  return Promise.resolve([]);
+  var query = this.sector_query_.bind([sector, start, end]);
+  return Promise.resolve(query.exec());
 };
 
 
@@ -187,6 +233,7 @@ LovefieldService.prototype.getSectorClosingPrices = function(
  */
 LovefieldService.prototype.observeStockClosingPrices = function(observerFn) {
   // Codelab TODO: Implement this method at codelab step 7.
+  this.db_.observe(this.stock_query_, observerFn);
 };
 
 
@@ -197,4 +244,5 @@ LovefieldService.prototype.observeStockClosingPrices = function(observerFn) {
  */
 LovefieldService.prototype.observeSectorClosingPrices = function(observerFn) {
   // Codelab TODO: Implement this method at codelab step 7.
+  this.db_.observe(this.sector_query_, observerFn);
 };
